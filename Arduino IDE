@@ -1,0 +1,67 @@
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+
+// --- GPS wiring (replace pins if different) ---
+TinyGPSPlus   gps;
+SoftwareSerial SerialGPS(4, 5);     // GPS TX→4 (RX), GPS RX→5 (TX)
+float Latitude, Longitude;
+
+// --- Wi-Fi credentials ---
+const char* ssid       = "OPPO A3u1";
+const char* password   = "akila1974";
+
+// --- PHP endpoint base URL (no params here) ---
+const char* serverBase = "http://192.168.1.6/Commutemate/update_location.php";
+
+void setup() {
+  // Start USB-serial for debug
+  Serial.begin(115200);
+  // Start GPS serial
+  SerialGPS.begin(9600);
+
+  // Connect to Wi-Fi
+  Serial.print("Connecting to WiFi");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected! IP=" + WiFi.localIP().toString());
+
+  // Indicate GPS parsing is about to start
+  Serial.println("Starting GPS parse…");
+}
+
+void loop() {
+  while (SerialGPS.available() > 0) {
+    gps.encode(SerialGPS.read());
+  }
+
+  if (gps.location.isUpdated()) {
+    Latitude = gps.location.lat();
+    Longitude = gps.location.lng();
+
+    Serial.print("Latitude: ");
+    Serial.println(Latitude, 6);
+    Serial.print("Longitude: ");
+    Serial.println(Longitude, 6);
+
+    // If connected, send data to your server
+    if (WiFi.status() == WL_CONNECTED) {
+      WiFiClient client;
+      String url = String(serverBase) + "?lat=" + String(Latitude, 6) + "&lng=" + String(Longitude, 6);
+      Serial.println("Sending to: " + url);
+
+      if (client.connect("192.168.1.6", 80)) {
+        client.println("GET /Commutemate/update_location.php?lat=" + String(Latitude, 6) + "&lng=" + String(Longitude, 6) + " HTTP/1.1");
+        client.println("Host: 192.168.1.6");
+        client.println("Connection: close");
+        client.println();
+      }
+    }
+
+    delay(5000); // Send every 5 seconds
+  }
+}
